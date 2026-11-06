@@ -98,16 +98,18 @@ export const GameText = {
 } as const;
 
 /**
- * 据点初始表。数组顺序就是场景里从下到上的绘制顺序。
+ * 据点初始兵力、阵营和名称。
  * 只读。开局和重开都要深拷贝后再使用。
+ * 画面位置以 game.scene 里的城节点为准，不要用这里的 position 摆城或画线。
  */
 export const STRONGHOLDS: readonly StrongholdConfig[] = [
-    { id: 'player_base', name: '青石城', faction: Faction.Player, troops: 100, position: { x: -420, y: 60 }, color: '#2F6BFF' },
-    { id: 'neutral_pass', name: '金顶关', faction: Faction.Neutral, troops: 40, position: { x: -40, y: -160 }, color: '#E0B000' },
-    { id: 'enemy_fort', name: '赤焰堡', faction: Faction.Enemy, troops: 80, position: { x: 180, y: 80 }, color: '#E23B3B' },
+    { id: 'player_base', name: '家园', faction: Faction.Player, troops: 100, position: { x: -250, y: -68 }, color: '#2F6BFF' },
+    { id: 'neutral_pass', name: '金城', faction: Faction.Neutral, troops: 40, position: { x: -137, y: 79 }, color: '#E0B000' },
+    { id: 'silver_city', name: '银城', faction: Faction.Enemy, troops: 80, position: { x: 86, y: 80 }, color: '#C9D0D8' },
+    { id: 'enemy_fort', name: '龙城', faction: Faction.Enemy, troops: 80, position: { x: 224, y: -49 }, color: '#E23B3B' },
 ];
 
-/** 三条路径的中间点。缺少对应项时不得改成直线。 */
+/** 旧布局的中间点。当前场景没有路线节点，运行时不要用它画线。 */
 export const ROUTE_MIDPOINTS: readonly RouteMidpointConfig[] = [
     { a: 'player_base', b: 'neutral_pass', midpoint: { x: -230, y: -50 } },
     { a: 'player_base', b: 'enemy_fort', midpoint: { x: -120, y: 170 } },
@@ -115,8 +117,8 @@ export const ROUTE_MIDPOINTS: readonly RouteMidpointConfig[] = [
 ];
 
 /**
- * 按无序据点对查找中间点。
- * 找不到时返回 null，调用方应视为配置错误，不能自行补直线。
+ * 按无序据点对查找旧布局中间点。
+ * 当前场景没有路线节点，运行时不要调用，也不要据此补直线或画线。
  */
 export function getRouteMidpoint(from: StrongholdId, to: StrongholdId): Vec2 | null {
     const route = ROUTE_MIDPOINTS.find((item) =>

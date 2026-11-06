@@ -1,19 +1,6 @@
-import { Button, Color, EditBox, Label, Layers, Node, tween, Tween, UIOpacity, UITransform } from 'cc';
-import { colorFromHex, createSpriteNode, getWhiteSpriteFrame } from './ArtSlots';
-import {
-    DISPATCH_INPUT_MAX_LENGTH,
-    GameText,
-    PANEL_BG_ALPHA,
-    PANEL_BG_COLOR,
-    PANEL_POSITION,
-    PANEL_SIZE,
-    RESTART_BUTTON_COLOR,
-    TOAST_DURATION,
-} from '../config/GameConfig';
+import { Button, Color, EditBox, Label, Node, tween, Tween, UITransform } from 'cc';
+import { TOAST_DURATION } from '../config/GameConfig';
 import { sanitizeDispatchText } from '../rules/DispatchRules';
-
-const DISPATCH_BUTTON_COLOR = '#2F9E44';
-const CAPTION_COLOR = '#C5D0DC';
 
 /** 面板把操作交回总控，自己不改兵力和阶段。 */
 export interface HudHandlers {
@@ -25,12 +12,10 @@ export interface HudHandlers {
 }
 
 /**
- * 右侧操作栏和顶部提示。
- * 按钮文字使用策划原句。提示出现后 1.5 秒隐藏，新提示会替换旧提示。
+ * 绑定场景里的 Hud 和 Toast。
+ * 只改文字和点击，不创建面板。
  */
 export class HudView {
-    readonly root: Node;
-
     private readonly sourceValue: Label;
     private readonly targetValue: Label;
     private readonly availableValue: Label;
@@ -38,49 +23,24 @@ export class HudView {
     private readonly editBox: EditBox;
     private readonly toastNode: Node;
     private readonly toastLabel: Label;
-    private readonly toastOpacity: UIOpacity;
     private readonly handlers: HudHandlers;
     private syncing = false;
 
-    constructor(parent: Node, handlers: HudHandlers) {
+    constructor(hud: Node, toast: Node, handlers: HudHandlers) {
         this.handlers = handlers;
-        this.root = new Node('Hud');
-        this.root.layer = Layers.Enum.UI_2D;
-        this.root.setParent(parent);
-
-        const panel = createSpriteNode(
-            'Panel',
-            PANEL_SIZE.width,
-            PANEL_SIZE.height,
-            null,
-            colorFromHex(PANEL_BG_COLOR, Math.round(PANEL_BG_ALPHA * 255)),
-        );
-        panel.setParent(this.root);
-        panel.setPosition(PANEL_POSITION.x, PANEL_POSITION.y, 0);
-
-        this.addCaption(panel, '标题', 290, 28, GameText.title, Color.WHITE);
-        this.addCaption(panel, '来源标题', 230, 18, '来源', colorFromHex(CAPTION_COLOR));
-        this.sourceValue = this.addCaption(panel, '来源', 196, 22, GameText.unselected, Color.WHITE);
-        this.addCaption(panel, '目标标题', 140, 18, '目标', colorFromHex(CAPTION_COLOR));
-        this.targetValue = this.addCaption(panel, '目标', 106, 22, GameText.unselected, Color.WHITE);
-        this.addCaption(panel, '兵力标题', 50, 18, '可派遣兵力', colorFromHex(CAPTION_COLOR));
-        this.availableValue = this.addCaption(panel, '兵力', 16, 22, '0', Color.WHITE);
-
-        this.addTextButton(panel, 'Minus', -100, -24, 48, 48, '-', colorFromHex('#3D4F66'), this.onMinus);
-        this.editBox = this.addEditBox(panel, 0, -24);
-        this.addTextButton(panel, 'Plus', 100, -24, 48, 48, '+', colorFromHex('#3D4F66'), this.onPlus);
-        this.addTextButton(panel, 'Dispatch', 0, -100, 260, 52, '派遣', colorFromHex(DISPATCH_BUTTON_COLOR), this.onDispatch);
-        this.addTextButton(panel, 'Restart', 0, -170, 260, 48, '重新开始', colorFromHex(RESTART_BUTTON_COLOR), this.onRestart);
-        this.statusValue = this.addCaption(panel, '状态', -240, 20, '', Color.WHITE);
-
-        this.toastNode = createSpriteNode('Toast', 420, 48, null, new Color(0, 0, 0, 180));
-        this.toastNode.setParent(this.root);
-        this.toastNode.setPosition(0, 300, 0);
-        this.toastOpacity = this.toastNode.addComponent(UIOpacity);
-        this.toastLabel = this.addCaption(this.toastNode, '提示文字', 0, 22, '', Color.WHITE);
-        this.toastNode.active = false;
-
+        this.sourceValue = this.requireLabel(hud, 'SourceValue');
+        this.targetValue = this.requireLabel(hud, 'TargetValue');
+        this.availableValue = this.requireLabel(hud, 'AvailableValue');
+        this.statusValue = this.requireLabel(hud, 'Status');
+        this.editBox = this.requireEditBox(hud, 'Input');
+        this.toastNode = toast;
+        this.toastLabel = this.requireNodeLabel(toast);
+        this.bindButton(hud, 'Minus', this.onMinus);
+        this.bindButton(hud, 'Plus', this.onPlus);
+        this.bindButton(hud, 'Dispatch', this.onDispatch);
+        this.bindButton(hud, 'Restart', this.onRestart);
         this.editBox.node.on(EditBox.EventType.TEXT_CHANGED, this.onTextChanged, this);
+        this.fitExistingLayout(hud);
     }
 
     setSourceText(text: string): void {
@@ -111,11 +71,10 @@ export class HudView {
 
     /** 新提示替换当前提示，并重新计算 1.5 秒。 */
     showToast(text: string): void {
-        Tween.stopAllByTarget(this.toastOpacity);
+        Tween.stopAllByTarget(this.toastNode);
         this.toastNode.active = true;
         this.toastLabel.string = text;
-        this.toastOpacity.opacity = 255;
-        tween(this.toastOpacity)
+        tween(this.toastNode)
             .delay(TOAST_DURATION)
             .call(() => {
                 this.toastNode.active = false;
@@ -124,15 +83,75 @@ export class HudView {
     }
 
     clearToast(): void {
-        Tween.stopAllByTarget(this.toastOpacity);
+        Tween.stopAllByTarget(this.toastNode);
         this.toastNode.active = false;
         this.toastLabel.string = '';
     }
 
+    /** 解除事件。不销毁场景节点。 */
     dispose(): void {
         this.clearToast();
         this.editBox.node.off(EditBox.EventType.TEXT_CHANGED, this.onTextChanged, this);
-        this.root.destroy();
+        this.offButton(this.editBox.node.parent, 'Minus', this.onMinus);
+        this.offButton(this.editBox.node.parent, 'Plus', this.onPlus);
+        this.offButton(this.editBox.node.parent, 'Dispatch', this.onDispatch);
+        this.offButton(this.editBox.node.parent, 'Restart', this.onRestart);
+    }
+
+    /** 现有节点挤在一起，文字又比框宽。只拉开间距并让数字明文显示。 */
+    private fitExistingLayout(hud: Node): void {
+        this.editBox.inputFlag = EditBox.InputFlag.DEFAULT;
+        this.editBox.inputMode = EditBox.InputMode.NUMERIC;
+        this.fitInputText(this.editBox.textLabel);
+        this.fitInputText(this.editBox.placeholderLabel);
+        const current = this.editBox.string;
+        this.editBox.string = current;
+
+        const plates = hud.children.filter((child) => child.name === 'Plate');
+        this.placeLabel(this.requireChild(hud, 'SourceTitle'), -590, 52);
+        this.placePair(plates[0], this.sourceValue.node, -480, 150);
+        this.placeLabel(this.requireChild(hud, 'TargetTitle'), -360, 52);
+        this.placePair(plates[1], this.targetValue.node, -250, 150);
+        this.placeLabel(this.requireChild(hud, 'AvailableTitle'), -100, 110);
+        this.placePair(plates[2], this.availableValue.node, 0, 56);
+        this.requireChild(hud, 'Minus').setPosition(58, 0, 0);
+        this.editBox.node.setPosition(130, 0, 0);
+        this.requireChild(hud, 'Plus').setPosition(200, 0, 0);
+        this.requireChild(hud, 'Dispatch').setPosition(300, 0, 0);
+        this.requireChild(hud, 'Restart').setPosition(430, 0, 0);
+        this.placeLabel(this.statusValue.node, 575, 120);
+    }
+
+    private placePair(plate: Node | undefined, value: Node, x: number, width: number): void {
+        if (plate) {
+            plate.setPosition(x, 0, 0);
+            plate.getComponent(UITransform)?.setContentSize(width, 36);
+        }
+        this.placeLabel(value, x, width - 8);
+    }
+
+    private fitInputText(label: Label | null): void {
+        if (!label) {
+            return;
+        }
+        label.color = Color.WHITE;
+        label.overflow = Label.Overflow.SHRINK;
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+        label.node.setPosition(0, 0, 0);
+        label.node.getComponent(UITransform)?.setContentSize(88, 32);
+    }
+
+    private placeLabel(node: Node, x: number, width: number): void {
+        node.setPosition(x, 0, 0);
+        node.getComponent(UITransform)?.setContentSize(width, 32);
+        const label = node.getComponent(Label);
+        if (!label) {
+            return;
+        }
+        label.overflow = Label.Overflow.SHRINK;
+        label.enableWrapText = false;
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
     }
 
     private onTextChanged(): void {
@@ -164,56 +183,48 @@ export class HudView {
         this.handlers.onRestart();
     }
 
-    private addCaption(parent: Node, name: string, y: number, fontSize: number, text: string, color: Color): Label {
-        const node = new Node(name);
-        node.layer = Layers.Enum.UI_2D;
-        node.setParent(parent);
-        node.setPosition(0, y, 0);
-        const transform = node.addComponent(UITransform);
-        transform.setContentSize(280, fontSize + 10);
-        const label = node.addComponent(Label);
-        label.useSystemFont = true;
-        label.string = text;
-        label.fontSize = fontSize;
-        label.lineHeight = fontSize + 6;
-        label.horizontalAlign = Label.HorizontalAlign.CENTER;
-        label.verticalAlign = Label.VerticalAlign.CENTER;
-        label.color = color;
+    private offButton(parent: Node | null, name: string, handler: () => void): void {
+        parent?.getChildByName(name)?.off(Button.EventType.CLICK, handler, this);
+    }
+
+    private bindButton(parent: Node, name: string, handler: () => void): void {
+        const node = this.requireChild(parent, name);
+        const button = node.getComponent(Button);
+        if (!button) {
+            throw new Error(`${parent.name}/${name} 缺少 Button`);
+        }
+        node.on(Button.EventType.CLICK, handler, this);
+    }
+
+    private requireEditBox(parent: Node, name: string): EditBox {
+        const editBox = this.requireChild(parent, name).getComponent(EditBox);
+        if (!editBox) {
+            throw new Error(`${parent.name}/${name} 缺少 EditBox`);
+        }
+        return editBox;
+    }
+
+    private requireLabel(parent: Node, name: string): Label {
+        const label = this.requireChild(parent, name).getComponent(Label);
+        if (!label) {
+            throw new Error(`${parent.name}/${name} 缺少 Label`);
+        }
         return label;
     }
 
-    private addTextButton(
-        parent: Node,
-        name: string,
-        x: number,
-        y: number,
-        width: number,
-        height: number,
-        text: string,
-        color: Color,
-        handler: () => void,
-    ): void {
-        const node = createSpriteNode(name, width, height, null, color);
-        node.setParent(parent);
-        node.setPosition(x, y, 0);
-        const button = node.addComponent(Button);
-        button.transition = Button.Transition.NONE;
-        node.on(Button.EventType.CLICK, handler, this);
-        this.addCaption(node, '文字', 0, 22, text, Color.WHITE);
+    private requireNodeLabel(node: Node): Label {
+        const label = node.getComponent(Label);
+        if (!label) {
+            throw new Error(`${node.name} 缺少 Label`);
+        }
+        return label;
     }
 
-    private addEditBox(parent: Node, x: number, y: number): EditBox {
-        const node = createSpriteNode('Input', 120, 48, null, Color.WHITE);
-        node.setParent(parent);
-        node.setPosition(x, y, 0);
-        const editBox = node.addComponent(EditBox);
-        editBox.backgroundImage = getWhiteSpriteFrame();
-        editBox.inputMode = EditBox.InputMode.NUMERIC;
-        editBox.maxLength = DISPATCH_INPUT_MAX_LENGTH;
-        editBox.string = '';
-        editBox.fontSize = 22;
-        editBox.fontColor = new Color(20, 24, 28, 255);
-        editBox.placeholder = '';
-        return editBox;
+    private requireChild(parent: Node, name: string): Node {
+        const child = parent.getChildByName(name);
+        if (!child) {
+            throw new Error(`${parent.name} 缺少 ${name}`);
+        }
+        return child;
     }
 }

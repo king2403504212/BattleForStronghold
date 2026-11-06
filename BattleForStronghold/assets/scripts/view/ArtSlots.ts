@@ -1,8 +1,9 @@
-import { _decorator, Color, Component, Layers, Node, Rect, Size, Sprite, SpriteFrame, Texture2D, UITransform } from 'cc';
-import { BG_COLOR } from '../config/GameConfig';
+import { _decorator, Color, Component, Node, Rect, Size, SpriteFrame, Texture2D } from 'cc';
 import { StrongholdId } from '../types/GameTypes';
 
 const { ccclass, property } = _decorator;
+
+/** 旧的运行时拼图工具。画面已在 game.scene 里，新代码不要调用这里创建节点。 */
 
 let whiteSpriteFrame: SpriteFrame | null = null;
 
@@ -40,27 +41,21 @@ export function colorFromHex(hex: string, alpha = 255): Color {
     );
 }
 
-/** 创建一个指定尺寸的 Sprite。有正式图时不再乘色。 */
+/** 禁止再调用。画面节点使用 game.scene 里已经摆好的节点。 */
 export function createSpriteNode(name: string, width: number, height: number, frame: SpriteFrame | null, tint: Color): Node {
-    const node = new Node(name);
-    node.layer = Layers.Enum.UI_2D;
-    const transform = node.addComponent(UITransform);
-    transform.setAnchorPoint(0.5, 0.5);
-    transform.setContentSize(width, height);
-    const sprite = node.addComponent(Sprite);
-    sprite.sizeMode = Sprite.SizeMode.CUSTOM;
-    sprite.spriteFrame = frame ?? getWhiteSpriteFrame();
-    sprite.color = frame ? Color.WHITE : tint;
-    transform.setContentSize(width, height);
-    return node;
+    void name;
+    void width;
+    void height;
+    void frame;
+    void tint;
+    throw new Error('不要用代码创建画面节点，直接使用 game.scene 里的现有节点');
 }
 
-/** 铺在画布中心的背景。没挂图时用背景色，挂图后显示原图。 */
+/** 禁止再调用。背景使用场景里的 Bg。 */
 export function createBackground(parent: Node, art: ArtSlots): Node {
-    const node = createSpriteNode('Background', 1280, 720, art.bgFrame, colorFromHex(BG_COLOR));
-    node.setParent(parent);
-    node.setPosition(0, 0, 0);
-    return node;
+    void parent;
+    void art;
+    throw new Error('不要用代码创建背景，直接使用 game.scene 里的 Bg');
 }
 
 /**

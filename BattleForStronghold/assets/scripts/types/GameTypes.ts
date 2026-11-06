@@ -20,8 +20,8 @@ export enum GamePhase {
     Battling = 'Battling',
 }
 
-/** 三个据点的固定 ID，必须与只读配置一致。 */
-export type StrongholdId = 'player_base' | 'neutral_pass' | 'enemy_fort';
+/** 场景里四座城的固定 ID，必须与只读配置一致。 */
+export type StrongholdId = 'player_base' | 'neutral_pass' | 'silver_city' | 'enemy_fort';
 
 /** Canvas 本地坐标。x 向右，y 向上，原点在画布中心。 */
 export interface Vec2 {

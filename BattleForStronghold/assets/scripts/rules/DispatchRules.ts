@@ -126,7 +126,6 @@ export function tryDispatch(session: GameSession): DispatchResult {
         troops: amount,
     };
     session.phase = GamePhase.Marching;
-    session.dispatchLock = false;
     return { ok: true, toast: null };
 }
 
