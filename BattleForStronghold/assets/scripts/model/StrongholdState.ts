@@ -45,6 +45,10 @@ export interface GameSession {
      * 只表示视觉焦点，不替代 sourceId 和 targetId。
      */
     focusId: StrongholdId | null;
+    /** 当前全局军粮。重开时回到 0。 */
+    grain: number;
+    /** 本局已经发过首次占领军粮的据点。 */
+    rewardedIds: StrongholdId[];
 }
 
 /** 从只读配置做出一局初始状态。配置对象本身不会被改到。 */
@@ -65,6 +69,8 @@ export function createSession(): GameSession {
         dispatchLock: false,
         army: null,
         focusId: null,
+        grain: 0,
+        rewardedIds: [],
     };
 }
 

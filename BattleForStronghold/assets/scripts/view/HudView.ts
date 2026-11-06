@@ -8,6 +8,7 @@ export interface HudHandlers {
     onMinus: () => void;
     onPlus: () => void;
     onDispatch: () => void;
+    onRecruit: () => void;
     onRestart: () => void;
 }
 
@@ -19,6 +20,7 @@ export class HudView {
     private readonly sourceValue: Label;
     private readonly targetValue: Label;
     private readonly availableValue: Label;
+    private readonly grainValue: Label;
     private readonly statusValue: Label;
     private readonly editBox: EditBox;
     private readonly toastNode: Node;
@@ -31,6 +33,7 @@ export class HudView {
         this.sourceValue = this.requireLabel(hud, 'SourceValue');
         this.targetValue = this.requireLabel(hud, 'TargetValue');
         this.availableValue = this.requireLabel(hud, 'AvailableValue');
+        this.grainValue = this.requireLabel(hud, 'GrainValue');
         this.statusValue = this.requireLabel(hud, 'Status');
         this.editBox = this.requireEditBox(hud, 'Input');
         this.toastNode = toast;
@@ -38,6 +41,7 @@ export class HudView {
         this.bindButton(hud, 'Minus', this.onMinus);
         this.bindButton(hud, 'Plus', this.onPlus);
         this.bindButton(hud, 'Dispatch', this.onDispatch);
+        this.bindButton(hud, 'Recruit', this.onRecruit);
         this.bindButton(hud, 'Restart', this.onRestart);
         this.editBox.node.on(EditBox.EventType.TEXT_CHANGED, this.onTextChanged, this);
         this.fitExistingLayout(hud);
@@ -53,6 +57,10 @@ export class HudView {
 
     setAvailableText(text: string): void {
         this.availableValue.string = text;
+    }
+
+    setGrainText(text: string): void {
+        this.grainValue.string = text;
     }
 
     setStatusText(text: string): void {
@@ -95,6 +103,7 @@ export class HudView {
         this.offButton(this.editBox.node.parent, 'Minus', this.onMinus);
         this.offButton(this.editBox.node.parent, 'Plus', this.onPlus);
         this.offButton(this.editBox.node.parent, 'Dispatch', this.onDispatch);
+        this.offButton(this.editBox.node.parent, 'Recruit', this.onRecruit);
         this.offButton(this.editBox.node.parent, 'Restart', this.onRestart);
     }
 
@@ -107,27 +116,32 @@ export class HudView {
         const current = this.editBox.string;
         this.editBox.string = current;
 
+        const rowY = -16;
+        const grainY = 46;
         const plates = hud.children.filter((child) => child.name === 'Plate');
-        this.placeLabel(this.requireChild(hud, 'SourceTitle'), -590, 52);
-        this.placePair(plates[0], this.sourceValue.node, -480, 150);
-        this.placeLabel(this.requireChild(hud, 'TargetTitle'), -360, 52);
-        this.placePair(plates[1], this.targetValue.node, -250, 150);
-        this.placeLabel(this.requireChild(hud, 'AvailableTitle'), -100, 110);
-        this.placePair(plates[2], this.availableValue.node, 0, 56);
-        this.requireChild(hud, 'Minus').setPosition(58, 0, 0);
-        this.editBox.node.setPosition(130, 0, 0);
-        this.requireChild(hud, 'Plus').setPosition(200, 0, 0);
-        this.requireChild(hud, 'Dispatch').setPosition(300, 0, 0);
-        this.requireChild(hud, 'Restart').setPosition(430, 0, 0);
-        this.placeLabel(this.statusValue.node, 575, 120);
+        this.placeLabel(this.requireChild(hud, 'SourceTitle'), -590, 52, rowY);
+        this.placePair(plates[0], this.sourceValue.node, -480, 150, rowY);
+        this.placeLabel(this.requireChild(hud, 'TargetTitle'), -360, 52, rowY);
+        this.placePair(plates[1], this.targetValue.node, -250, 150, rowY);
+        this.placeLabel(this.requireChild(hud, 'AvailableTitle'), -120, 120, rowY);
+        this.placePair(plates[2], this.availableValue.node, 10, 100, rowY);
+        this.requireChild(hud, 'Minus').setPosition(108, rowY, 0);
+        this.editBox.node.setPosition(180, rowY, 0);
+        this.requireChild(hud, 'Plus').setPosition(250, rowY, 0);
+        this.requireChild(hud, 'Dispatch').setPosition(350, rowY, 0);
+        this.requireChild(hud, 'Restart').setPosition(470, rowY, 0);
+        this.placeLabel(this.statusValue.node, 590, 110, rowY);
+        this.placeLabel(this.requireChild(hud, 'GrainTitle'), -560, 70, grainY);
+        this.placePair(hud.children.find((child) => child.name === 'GrainPlate'), this.grainValue.node, -470, 90, grainY);
+        this.requireChild(hud, 'Recruit').setPosition(-360, grainY, 0);
     }
 
-    private placePair(plate: Node | undefined, value: Node, x: number, width: number): void {
+    private placePair(plate: Node | undefined, value: Node, x: number, width: number, y = 0): void {
         if (plate) {
-            plate.setPosition(x, 0, 0);
+            plate.setPosition(x, y, 0);
             plate.getComponent(UITransform)?.setContentSize(width, 36);
         }
-        this.placeLabel(value, x, width - 8);
+        this.placeLabel(value, x, width - 8, y);
     }
 
     private fitInputText(label: Label | null): void {
@@ -142,8 +156,8 @@ export class HudView {
         label.node.getComponent(UITransform)?.setContentSize(88, 32);
     }
 
-    private placeLabel(node: Node, x: number, width: number): void {
-        node.setPosition(x, 0, 0);
+    private placeLabel(node: Node, x: number, width: number, y = 0): void {
+        node.setPosition(x, y, 0);
         node.getComponent(UITransform)?.setContentSize(width, 32);
         const label = node.getComponent(Label);
         if (!label) {
@@ -177,6 +191,10 @@ export class HudView {
 
     private onDispatch(): void {
         this.handlers.onDispatch();
+    }
+
+    private onRecruit(): void {
+        this.handlers.onRecruit();
     }
 
     private onRestart(): void {

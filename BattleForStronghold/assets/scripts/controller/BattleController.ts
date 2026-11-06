@@ -1,13 +1,28 @@
-import { _decorator, Component, macro, Node, Prefab, profiler, Tween, Vec3 } from 'cc';
+import {
+    _decorator,
+    Animation,
+    Component,
+    instantiate,
+    macro,
+    Node,
+    Prefab,
+    profiler,
+    ResolutionPolicy,
+    Tween,
+    UITransform,
+    Vec3,
+    view,
+} from 'cc';
 import {
     ATTACKER_FLOAT_OFFSET,
     BATTLE_INTERVAL,
     DEFENDER_FLOAT_OFFSET,
     FACTION_LABEL,
     GameText,
+    TROOP_CAP,
 } from '../config/GameConfig';
 import { createSession, findStronghold, GameSession, getStatusText } from '../model/StrongholdState';
-import { changeDispatchAmount, onStrongholdClick, tryDispatch } from '../rules/DispatchRules';
+import { changeDispatchAmount, onStrongholdClick, tryDispatch, tryRecruit } from '../rules/DispatchRules';
 import { applyBattleTick, onArmyArrived } from '../rules/BattleRules';
 import { GamePhase, StrongholdId, Vec2 } from '../types/GameTypes';
 import { ArmyView, showDamageFloat } from '../view/ArmyView';
@@ -15,6 +30,9 @@ import { HudView } from '../view/HudView';
 import { StrongholdView } from '../view/StrongholdView';
 
 const { ccclass, property } = _decorator;
+const DESIGN_WIDTH = 1280;
+const DESIGN_HEIGHT = 720;
+const HUD_HEIGHT = 150;
 
 interface StrongholdLink {
     id: StrongholdId;
@@ -39,12 +57,18 @@ export class BattleController extends Component {
     @property(Prefab)
     soldierPrefab: Prefab | null = null;
 
+    /** 在属性检查器里拖入 SiegeFx.prefab。交战时在目标城上方循环播放。 */
+    @property(Prefab)
+    siegeFxPrefab: Prefab | null = null;
+
     private session: GameSession = createSession();
     private canvas: Node | null = null;
     private hud: HudView | null = null;
     private armyView: ArmyView | null = null;
+    private siegeFx: Node | null = null;
     private readonly strongholdViews = new Map<StrongholdId, StrongholdView>();
     private readonly floatNodes: Node[] = [];
+    private resolutionPolicy: number | null = null;
     private initialized = false;
 
     protected onEnable(): void {
@@ -56,6 +80,8 @@ export class BattleController extends Component {
         if (!this.canvas) {
             throw new Error('场景缺少 Canvas');
         }
+        view.on('canvas-resize', this.handleCanvasResize, this);
+        this.applyResolutionPolicy();
         this.session = createSession();
         try {
             this.bindStrongholds();
@@ -67,9 +93,11 @@ export class BattleController extends Component {
                 onMinus: () => this.handleAmountChange(-1),
                 onPlus: () => this.handleAmountChange(1),
                 onDispatch: () => this.handleDispatch(),
+                onRecruit: () => this.handleRecruit(),
                 onRestart: () => this.handleRestart(),
             });
             this.renderAll();
+            this.scheduleOnce(this.refreshResponsiveLayout);
         } catch (error) {
             this.releaseBindings();
             throw error;
@@ -79,6 +107,43 @@ export class BattleController extends Component {
 
     protected onDisable(): void {
         this.releaseBindings();
+    }
+
+    private handleCanvasResize(): void {
+        this.applyResolutionPolicy();
+        this.scheduleOnce(this.refreshResponsiveLayout);
+    }
+
+    /**
+     * 宽屏固定高度，窄屏固定宽度。
+     * 始终完整显示 1280×720 的设计区域，多出的空间交给背景和 Widget 填充。
+     */
+    private applyResolutionPolicy(): void {
+        const frame = view.getFrameSize();
+        if (frame.height <= 0) {
+            return;
+        }
+        const next = frame.width / frame.height >= DESIGN_WIDTH / DESIGN_HEIGHT
+            ? ResolutionPolicy.FIXED_HEIGHT
+            : ResolutionPolicy.FIXED_WIDTH;
+        if (this.resolutionPolicy === next) {
+            return;
+        }
+        this.resolutionPolicy = next;
+        view.setDesignResolutionSize(DESIGN_WIDTH, DESIGN_HEIGHT, next);
+    }
+
+    private refreshResponsiveLayout(): void {
+        if (!this.canvas) {
+            return;
+        }
+        const canvasTransform = this.canvas.getComponent(UITransform);
+        if (!canvasTransform) {
+            return;
+        }
+        for (const stronghold of this.strongholdViews.values()) {
+            stronghold.refreshLayout(this.canvas, HUD_HEIGHT);
+        }
     }
 
     private bindStrongholds(): void {
@@ -131,6 +196,12 @@ export class BattleController extends Component {
         this.renderHud();
     }
 
+    private handleRecruit(): void {
+        const result = tryRecruit(this.session);
+        this.showToast(result.toast);
+        this.renderAll();
+    }
+
     private handleDispatch(): void {
         const result = tryDispatch(this.session);
         if (!result.ok) {
@@ -168,9 +239,13 @@ export class BattleController extends Component {
     }
 
     private handleArmyArrived(): void {
+        const targetView = this.session.army
+            ? this.strongholdViews.get(this.session.army.targetId)
+            : undefined;
         const result = onArmyArrived(this.session);
+        this.disposeArmyView();
         if (result.capturedImmediately) {
-            this.disposeArmyView();
+            this.clearSiegeFx();
             this.showToast(result.toast);
             this.renderAll();
             return;
@@ -178,7 +253,9 @@ export class BattleController extends Component {
         if (this.session.phase !== GamePhase.Battling) {
             return;
         }
-        this.armyView?.setStateText(GameText.battling);
+        if (targetView) {
+            this.showSiegeFx(targetView.body);
+        }
         this.renderAll();
         this.schedule(this.handleBattleTick, BATTLE_INTERVAL, macro.REPEAT_FOREVER, BATTLE_INTERVAL);
     }
@@ -224,6 +301,7 @@ export class BattleController extends Component {
 
         this.unschedule(this.handleBattleTick);
         this.disposeArmyView();
+        this.clearSiegeFx();
         this.showToast(result.toast);
         this.renderAll();
     }
@@ -231,6 +309,7 @@ export class BattleController extends Component {
     private handleRestart(): void {
         this.unschedule(this.handleBattleTick);
         this.disposeArmyView();
+        this.clearSiegeFx();
         this.clearDamageFloats();
         this.hud?.clearToast();
         for (const view of this.strongholdViews.values()) {
@@ -260,7 +339,8 @@ export class BattleController extends Component {
         const target = this.session.targetId ? findStronghold(this.session, this.session.targetId) : null;
         this.hud.setSourceText(source ? this.formatStronghold(source.name, source.faction) : GameText.unselected);
         this.hud.setTargetText(target ? this.formatStronghold(target.name, target.faction) : GameText.unselected);
-        this.hud.setAvailableText(String(source?.troops ?? 0));
+        this.hud.setAvailableText(source ? `${source.troops}/${TROOP_CAP[source.id]}` : '0/0');
+        this.hud.setGrainText(String(this.session.grain));
         this.hud.setDispatchText(this.session.dispatchText);
         this.hud.setStatusText(getStatusText(this.session));
     }
@@ -280,6 +360,45 @@ export class BattleController extends Component {
         this.armyView = null;
     }
 
+    /** 士兵已经消失。攻城动画挂在 Canvas 下，位置取目标城当前坐标。 */
+    private showSiegeFx(targetBody: Node): void {
+        if (!this.canvas || !this.siegeFxPrefab) {
+            return;
+        }
+        this.clearSiegeFx();
+        const point = this.pointIn(this.canvas, targetBody);
+        const node = instantiate(this.siegeFxPrefab);
+        node.layer = this.canvas.layer;
+        node.setParent(this.canvas);
+        const bodyHeight = (targetBody.getComponent(UITransform)?.height ?? 0) * Math.abs(targetBody.scale.y);
+        const fxHeight = (node.getComponent(UITransform)?.height ?? 0) * Math.abs(node.scale.y);
+        node.setPosition(point.x, point.y + bodyHeight * 0.45 + fxHeight * 0.15, 0);
+        this.keepBelowPanels(node);
+        node.getComponent(Animation)?.play();
+        this.siegeFx = node;
+    }
+
+    private keepBelowPanels(node: Node): void {
+        if (!this.canvas || node.parent !== this.canvas) {
+            return;
+        }
+        const indexes = ['Hud', 'Toast']
+            .map((name) => this.findDescendant(this.canvas!, name))
+            .filter((item): item is Node => item?.parent === this.canvas)
+            .map((item) => item.getSiblingIndex());
+        if (indexes.length > 0) {
+            node.setSiblingIndex(Math.min(...indexes));
+        }
+    }
+
+    private clearSiegeFx(): void {
+        if (this.siegeFx?.isValid) {
+            this.siegeFx.getComponent(Animation)?.stop();
+            this.siegeFx.destroy();
+        }
+        this.siegeFx = null;
+    }
+
     private clearDamageFloats(): void {
         for (const node of this.floatNodes) {
             if (node.isValid) {
@@ -291,8 +410,11 @@ export class BattleController extends Component {
     }
 
     private releaseBindings(): void {
+        view.off('canvas-resize', this.handleCanvasResize, this);
+        this.unschedule(this.refreshResponsiveLayout);
         this.unschedule(this.handleBattleTick);
         this.disposeArmyView();
+        this.clearSiegeFx();
         this.clearDamageFloats();
         for (const view of this.strongholdViews.values()) {
             view.dispose();
@@ -301,6 +423,7 @@ export class BattleController extends Component {
         this.hud?.dispose();
         this.hud = null;
         this.canvas = null;
+        this.resolutionPolicy = null;
         this.initialized = false;
     }
 

@@ -18,6 +18,8 @@ export class ArmyView {
     private readonly alongGap: number;
     private readonly acrossGap: number;
     private readonly bodyHalfHeight: number;
+    private readonly soldierScaleX: number;
+    private readonly soldierScaleY: number;
     private troops = 0;
     private stateText = '';
     private march: Vec2 = { x: 1, y: 0 };
@@ -32,6 +34,8 @@ export class ArmyView {
         const bodyWidth = (size?.width ?? 58) * Math.abs(scale.x);
         const bodyHeight = (size?.height ?? 94) * Math.abs(scale.y);
         this.bodyHalfHeight = bodyHeight / 2;
+        this.soldierScaleX = Math.abs(scale.x);
+        this.soldierScaleY = scale.y;
         this.alongGap = Math.max(bodyWidth, bodyHeight) + 12;
         this.acrossGap = bodyWidth + 12;
         this.root = new Node('Army');
@@ -126,7 +130,7 @@ export class ArmyView {
         return Math.min(8, Math.max(1, Math.ceil(troops / 8)));
     }
 
-    /** 沿当前行军方向排成两列，后排跟在路线后方。不改士兵缩放。 */
+    /** 沿当前行军方向排成两列。向左时把预制体的横向缩放改为负值。 */
     private layoutSoldiers(): void {
         const count = this.soldiers.length;
         const length = Math.hypot(this.march.x, this.march.y) || 1;
@@ -143,7 +147,10 @@ export class ArmyView {
             const side = (slot - (width - 1) / 2) * this.acrossGap;
             const x = forwardX * back + sideX * side;
             const y = forwardY * back + sideY * side;
-            this.soldiers[index].setPosition(x, y, 0);
+            const soldier = this.soldiers[index];
+            const face = this.march.x < 0 ? -1 : 1;
+            soldier.setScale(this.soldierScaleX * face, this.soldierScaleY, soldier.scale.z);
+            soldier.setPosition(x, y, 0);
             top = Math.max(top, y + this.bodyHalfHeight);
         }
         this.statusNode.setPosition(0, top + 28, 0);
@@ -178,7 +185,7 @@ export class ArmyView {
             .start();
     }
 
-    /** 按这一段路线的方向重新排队。士兵缩放保持预制体原值。 */
+    /** 按这一段路线的方向重新排队，并让士兵朝向行军方向。 */
     private face(from: Vec2, to: Vec2): void {
         this.march = { x: to.x - from.x, y: to.y - from.y };
         this.layoutSoldiers();

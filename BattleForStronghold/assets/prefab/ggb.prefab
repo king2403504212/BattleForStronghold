@@ -110,12 +110,12 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "f4e533e2-2c6f-4b52-bd8a-06f99da8afb8@f9941",
+      "__uuid__": "752da05e-2c95-44c7-a6cc-696a579b488f@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
     "_fillType": 0,
-    "_sizeMode": 1,
+    "_sizeMode": 0,
     "_fillCenter": {
       "__type__": "cc.Vec2",
       "x": 0,
@@ -141,6 +141,7 @@
       "__id__": 0
     },
     "fileId": "d12kIkL8JNYa/juG2mFQ5o",
+    "instance": null,
     "targetOverrides": null
   }
 ]

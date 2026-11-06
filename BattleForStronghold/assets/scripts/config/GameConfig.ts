@@ -38,6 +38,24 @@ export const MOVE_SPEED = 200;
 export const BATTLE_INTERVAL = 0.5;
 /** 每一跳双方各自扣除的兵力。不足时只扣剩余值。 */
 export const BATTLE_DAMAGE = 5;
+/** 一次征兵最多补充的兵力，也是对应消耗的军粮。实际补充量不超过剩余上限和现有军粮。 */
+export const RECRUIT_AMOUNT = 20;
+
+/** 每座城的兵力上限。征兵不能超过这里。 */
+export const TROOP_CAP: Readonly<Record<StrongholdId, number>> = {
+    player_base: 100,
+    neutral_pass: 60,
+    silver_city: 100,
+    enemy_fort: 100,
+};
+
+/** 非玩家城池第一次被占领时立即获得的军粮。家园不会被占领，因此为 0。 */
+export const FIRST_CAPTURE_GRAIN: Readonly<Record<StrongholdId, number>> = {
+    player_base: 0,
+    neutral_pass: 40,
+    silver_city: 60,
+    enemy_fort: 80,
+};
 
 /** 顶部提示停留时间（秒）。新提示直接替换旧提示。 */
 export const TOAST_DURATION = 1.5;
@@ -95,6 +113,8 @@ export const GameText = {
     onlyFromPlayer: '只能从己方据点出兵',
     captureSuccess: '占领成功',
     attackFail: '进攻失败',
+    troopsFull: '兵力已满',
+    notEnoughGrain: '军粮不足',
 } as const;
 
 /**

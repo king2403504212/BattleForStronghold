@@ -1,4 +1,4 @@
-import { DEFAULT_DISPATCH_AMOUNT, DISPATCH_INPUT_MAX_LENGTH, GameText } from '../config/GameConfig';
+import { DEFAULT_DISPATCH_AMOUNT, DISPATCH_INPUT_MAX_LENGTH, GameText, RECRUIT_AMOUNT, TROOP_CAP } from '../config/GameConfig';
 import { findStronghold, GameSession } from '../model/StrongholdState';
 import { Faction, GamePhase, StrongholdId } from '../types/GameTypes';
 
@@ -68,15 +68,16 @@ export function changeDispatchAmount(session: GameSession, delta: 1 | -1): RuleN
         return { toast: GameText.notEnoughTroops };
     }
 
+    const step = 10;
     const current = parseDispatchAmount(session.dispatchText);
     if (delta < 0) {
-        const next = current === null || current <= 1 ? 1 : current - 1;
+        const next = current === null || current <= step ? 1 : current - step;
         session.dispatchText = String(next);
         return { toast: null };
     }
 
     const base = current === null ? 0 : current;
-    const next = Math.min(source.troops, base + 1);
+    const next = Math.min(source.troops, base + step);
     session.dispatchText = String(next < 1 ? 1 : next);
     return { toast: null };
 }
@@ -127,6 +128,36 @@ export function tryDispatch(session: GameSession): DispatchResult {
     };
     session.phase = GamePhase.Marching;
     return { ok: true, toast: null };
+}
+
+/**
+ * 给当前己方来源征兵。
+ * 每次最多补充 20，实际数量同时受兵力上限和现有军粮限制，1 点军粮换 1 点兵力。
+ */
+export function tryRecruit(session: GameSession): RuleNotice {
+    if (session.phase === GamePhase.Marching || session.phase === GamePhase.Battling) {
+        return { toast: GameText.armyBusy };
+    }
+    if (session.sourceId === null) {
+        return { toast: GameText.selectSourceFirst };
+    }
+    const source = findStronghold(session, session.sourceId);
+    if (!source || source.faction !== Faction.Player) {
+        return { toast: GameText.selectSourceFirst };
+    }
+
+    const room = TROOP_CAP[source.id] - source.troops;
+    if (room <= 0) {
+        return { toast: GameText.troopsFull };
+    }
+    if (session.grain <= 0) {
+        return { toast: GameText.notEnoughGrain };
+    }
+
+    const gain = Math.min(RECRUIT_AMOUNT, room, session.grain);
+    source.troops += gain;
+    session.grain -= gain;
+    return { toast: null };
 }
 
 /** 来源兵力为 0 时填 0，否则填 min(默认值, 当前兵力)。 */

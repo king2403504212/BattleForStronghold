@@ -1,4 +1,4 @@
-import { EventTouch, Label, Node, tween, Tween, UITransform, Vec3 } from 'cc';
+import { EventTouch, Label, Node, Sprite, tween, Tween, UITransform, Vec3 } from 'cc';
 import { FACTION_LABEL, FOCUS_DURATION, FOCUS_SCALE, GameText, PRESS_DURATION, PRESS_SCALE } from '../config/GameConfig';
 import { StrongholdState } from '../model/StrongholdState';
 import { StrongholdId } from '../types/GameTypes';
@@ -32,7 +32,7 @@ export class StrongholdView {
         this.sourceMark = this.requireChild(info, 'SourceMark');
         this.targetMark = this.requireChild(info, 'TargetMark');
         this.baseScale = body.scale.clone();
-        this.placeMarksAboveName();
+        this.alignLabels();
         body.on(Node.EventType.TOUCH_END, this.handleTouch, this);
         info.on(Node.EventType.TOUCH_END, this.handleTouch, this);
     }
@@ -100,11 +100,84 @@ export class StrongholdView {
         this.targetMark.active = false;
     }
 
+    /** 信息节点始终对准城池中心，避免整组文字被屏幕边界推离城池。 */
+    refreshLayout(canvas: Node, hudHeight: number): void {
+        const parent = this.info.parent;
+        if (!parent) {
+            return;
+        }
+        const position = new Vec3();
+        parent.inverseTransformPoint(position, this.body.worldPosition);
+        this.info.setPosition(position.x, position.y, this.info.position.z);
+        this.alignLabels(canvas, hudHeight);
+    }
+
     /** 解除点击。不销毁场景节点。 */
     dispose(): void {
         this.resetVisual();
         this.body.off(Node.EventType.TOUCH_END, this.handleTouch, this);
         this.info.off(Node.EventType.TOUCH_END, this.handleTouch, this);
+    }
+
+    /** 四座城使用同一套间距：阵营距城顶 8 像素，城名在阵营上方，兵力距城底 8 像素。 */
+    private alignLabels(canvas: Node | null = null, hudHeight = 0): void {
+        const extent = this.bodyExtent();
+        const gap = 8;
+        const labelHeight = 32;
+        const name = this.requireChild(this.info, 'Name');
+        const faction = this.factionLabel.node;
+        const troops = this.troopLabel.node;
+        const factionY = extent.top + gap + labelHeight / 2;
+        const nameY = factionY + labelHeight + gap;
+        let troopY = extent.bottom - gap - labelHeight / 2;
+        const canvasTransform = canvas?.getComponent(UITransform);
+        if (canvasTransform && hudHeight > 0) {
+            const hudTop = -canvasTransform.height / 2 + hudHeight + gap;
+            const troopBottom = this.info.position.y + troopY - labelHeight / 2;
+            if (troopBottom < hudTop) {
+                troopY += hudTop - troopBottom;
+            }
+        }
+        this.placeWithPlate(name, nameY, 88, labelHeight);
+        this.placeWithPlate(faction, factionY, 72, labelHeight);
+        this.placeWithPlate(troops, troopY, 120, labelHeight);
+        this.placeMarksAboveName();
+    }
+
+    /** 用图片可见区域的上下边，避免透明留白把城名撑得远近不一。 */
+    private bodyExtent(): { top: number; bottom: number } {
+        const transform = this.body.getComponent(UITransform);
+        const parent = this.info.parent;
+        if (!transform || !parent) {
+            return { top: 70, bottom: -70 };
+        }
+        const scaleY = Math.abs(this.body.worldScale.y) / (Math.abs(parent.worldScale.y) || 1);
+        const frame = this.body.getComponent(Sprite)?.spriteFrame;
+        const contentHeight = transform.height;
+        if (frame && contentHeight > 0 && frame.originalSize.height > 0 && Math.abs(contentHeight - frame.rect.height) > 1) {
+            const pixelsToLocal = contentHeight / frame.originalSize.height;
+            const visualCenter = frame.offset.y * pixelsToLocal;
+            const visualHalf = frame.rect.height * pixelsToLocal / 2;
+            return {
+                top: (visualCenter + visualHalf) * scaleY,
+                bottom: (visualCenter - visualHalf) * scaleY,
+            };
+        }
+        return {
+            top: contentHeight * (1 - transform.anchorY) * scaleY,
+            bottom: -contentHeight * transform.anchorY * scaleY,
+        };
+    }
+
+    private placeWithPlate(node: Node, y: number, width: number, height: number): void {
+        node.setPosition(0, y, 0);
+        node.getComponent(UITransform)?.setContentSize(width, height);
+        const plate = node.getSiblingIndex() > 0 ? node.parent?.children[node.getSiblingIndex() - 1] : null;
+        if (plate?.name !== 'Plate') {
+            return;
+        }
+        plate.setPosition(0, y, 0);
+        plate.getComponent(UITransform)?.setContentSize(width + 16, height);
     }
 
     /** 标记原来在信息节点中心，会盖住城的图片。改到城名上方。 */

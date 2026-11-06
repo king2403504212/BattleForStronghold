@@ -1,6 +1,6 @@
-import { BATTLE_DAMAGE, GameText, STRONGHOLDS } from '../config/GameConfig';
-import { findStronghold, finishArmy, GameSession } from '../model/StrongholdState';
-import { Faction, GamePhase } from '../types/GameTypes';
+import { BATTLE_DAMAGE, FIRST_CAPTURE_GRAIN, GameText, STRONGHOLDS } from '../config/GameConfig';
+import { findStronghold, finishArmy, GameSession, StrongholdState } from '../model/StrongholdState';
+import { Faction, GamePhase, StrongholdId } from '../types/GameTypes';
 
 /** 一跳或到达结算的结果。ongoing 表示战斗还要继续。 */
 export type BattleOutcome = 'ongoing' | 'capture' | 'fail';
@@ -38,8 +38,8 @@ export function onArmyArrived(session: GameSession): ArrivalResult {
         return { capturedImmediately: false, toast: null };
     }
 
-    capture(session, target, session.army.troops);
-    return { capturedImmediately: true, toast: GameText.captureSuccess };
+    const grain = capture(session, target, session.army.troops);
+    return { capturedImmediately: true, toast: captureToast(grain) };
 }
 
 /**
@@ -61,12 +61,12 @@ export function applyBattleTick(session: GameSession): TickResult | null {
     target.troops -= defenderLoss;
 
     if (target.troops === 0 && session.army.troops > 0) {
-        capture(session, target, session.army.troops);
+        const grain = capture(session, target, session.army.troops);
         return {
             outcome: 'capture',
             attackerLoss,
             defenderLoss,
-            toast: GameText.captureSuccess,
+            toast: captureToast(grain),
         };
     }
     if (session.army.troops === 0 && target.troops > 0) {
@@ -95,12 +95,29 @@ export function applyBattleTick(session: GameSession): TickResult | null {
     };
 }
 
-/** 把目标改成玩家，守军改为攻方剩余兵力。名称保持不变。 */
-function capture(session: GameSession, target: { faction: Faction; troops: number; color: string }, attackerTroops: number): void {
+/** 把目标改成玩家，守军改为攻方剩余兵力。返回本次首次占领奖励的军粮。 */
+function capture(session: GameSession, target: StrongholdState, attackerTroops: number): number {
     target.faction = Faction.Player;
     target.troops = attackerTroops;
     target.color = factionColor(Faction.Player);
+    const grain = grantFirstCaptureGrain(session, target.id);
     finishArmy(session);
+    return grain;
+}
+
+/** 每座城每局只奖励一次。奖励数量来自只读配置。 */
+function grantFirstCaptureGrain(session: GameSession, id: StrongholdId): number {
+    if (session.rewardedIds.includes(id)) {
+        return 0;
+    }
+    const amount = FIRST_CAPTURE_GRAIN[id];
+    session.rewardedIds.push(id);
+    session.grain += amount;
+    return amount;
+}
+
+function captureToast(grain: number): string {
+    return grain > 0 ? `${GameText.captureSuccess}，军粮 +${grain}` : GameText.captureSuccess;
 }
 
 /** 只读配置里的阵营色。三个阵营都有初始据点，因此总能取到。 */
