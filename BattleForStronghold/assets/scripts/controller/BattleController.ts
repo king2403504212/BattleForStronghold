@@ -18,15 +18,15 @@ const { ccclass, property } = _decorator;
 
 interface StrongholdLink {
     id: StrongholdId;
-    bodyPath: string;
-    infoPath: string;
+    bodyName: string;
+    infoName: string;
 }
 
 const STRONGHOLD_LINKS: readonly StrongholdLink[] = [
-    { id: 'player_base', bodyPath: 'home', infoPath: 'Info/HomeInfo' },
-    { id: 'neutral_pass', bodyPath: 'Strongholds/gold', infoPath: 'Info/GoldInfo' },
-    { id: 'silver_city', bodyPath: 'Strongholds/silver', infoPath: 'Info/SilverInfo' },
-    { id: 'enemy_fort', bodyPath: 'Strongholds/dragon', infoPath: 'Info/DragonInfo' },
+    { id: 'player_base', bodyName: 'home', infoName: 'HomeInfo' },
+    { id: 'neutral_pass', bodyName: 'gold', infoName: 'GoldInfo' },
+    { id: 'silver_city', bodyName: 'silver', infoName: 'SilverInfo' },
+    { id: 'enemy_fort', bodyName: 'dragon', infoName: 'DragonInfo' },
 ];
 
 /**
@@ -60,7 +60,7 @@ export class BattleController extends Component {
         try {
             this.bindStrongholds();
             this.applySceneFacts();
-            this.hud = new HudView(this.requirePath(this.canvas, 'Hud'), this.requirePath(this.canvas, 'Toast'), {
+            this.hud = new HudView(this.requireDescendant(this.canvas, 'Hud'), this.requireDescendant(this.canvas, 'Toast'), {
                 onDispatchText: (text) => {
                     this.session.dispatchText = text;
                 },
@@ -87,8 +87,8 @@ export class BattleController extends Component {
         }
         for (const link of STRONGHOLD_LINKS) {
             const view = new StrongholdView(
-                this.requirePath(this.canvas, link.bodyPath),
-                this.requirePath(this.canvas, link.infoPath),
+                this.requireDescendant(this.canvas, link.bodyName),
+                this.requireDescendant(this.canvas, link.infoName),
                 link.id,
                 (id) => this.handleStrongholdClick(id),
             );
@@ -158,7 +158,7 @@ export class BattleController extends Component {
             throw new Error('场景缺少出兵城或目标城');
         }
 
-        const gate = this.findPath(this.canvas, 'ggb');
+        const gate = this.findDescendant(this.canvas, 'ggb');
         const startNode = source.id === 'player_base' && gate ? gate : sourceView.body;
         const start = this.pointIn(this.canvas, startNode);
         const end = this.pointIn(this.canvas, targetView.body);
@@ -310,18 +310,23 @@ export class BattleController extends Component {
         return { x: point.x, y: point.y };
     }
 
-    private findPath(root: Node, path: string): Node | null {
-        let current: Node | null = root;
-        for (const name of path.split('/')) {
-            current = current?.getChildByName(name) ?? null;
+    private findDescendant(root: Node, name: string): Node | null {
+        if (root.name === name) {
+            return root;
         }
-        return current;
+        for (const child of root.children) {
+            const found = this.findDescendant(child, name);
+            if (found) {
+                return found;
+            }
+        }
+        return null;
     }
 
-    private requirePath(root: Node, path: string): Node {
-        const current = this.findPath(root, path);
+    private requireDescendant(root: Node, name: string): Node {
+        const current = this.findDescendant(root, name);
         if (!current) {
-            throw new Error(`场景缺少节点 ${path}`);
+            throw new Error(`场景缺少节点 ${name}`);
         }
         return current;
     }

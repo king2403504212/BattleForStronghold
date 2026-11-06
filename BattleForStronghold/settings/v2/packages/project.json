@@ -2,7 +2,8 @@
   "__version__": "1.0.6",
   "general": {
     "designResolution": {
-      "fitHeight": true
+      "fitHeight": false
     }
-  }
+  },
+  "custom_joint_texture_layouts": []
 }
